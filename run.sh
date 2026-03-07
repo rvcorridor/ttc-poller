@@ -1,11 +1,4 @@
-mkdir pbufs >> err.txt
-mkdir raw >> err.txt
+source "$HOME/ttc-poller/venv/bin/activate"
 
-./venv/bin/python3 main.py
-sleep 15
-./venv/bin/python3 main.py
-sleep 15
-./venv/bin/python3 main.py
-sleep 15
-./venv/bin/python3 main.py
+python3 "$HOME/ttc-poller/main.py"
 

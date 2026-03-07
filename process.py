@@ -1,18 +1,18 @@
 import gtfs.gtfs_realtime_pb2 as gtfs
 import pandas as pd
 
-DATA_COLUMNS = ["HeaderTime", "Timestamp", "TripID", "RouteID", "Latitude", "Longitude", "Bearing", "Speed", "TargetStop",
+POSITION_COLUMNS = ["HeaderTime", "Timestamp", "TripID", "RouteID", "Latitude", "Longitude", "Bearing", "Speed", "TargetStop",
                 "Occupancy"]
 
 # print(gtfs.FeedMessage().ParseFromString());
 
 
-def extract_positions(fname: str = "vehicle-positions.pb") -> pd.DataFrame | None:
+def extract_positions(fname: str = "samples/vehicle-positions.pb") -> pd.DataFrame | None:
     # I don't want to see the gtfs stuff in main.py
 
     feed = gtfs.FeedMessage()
 
-    buf = pd.DataFrame(columns=DATA_COLUMNS)
+    buf = pd.DataFrame(columns=POSITION_COLUMNS)
 
     try:
         with open(fname, mode="rb") as r:
@@ -39,11 +39,50 @@ def extract_positions(fname: str = "vehicle-positions.pb") -> pd.DataFrame | Non
     return buf
 
 
-def extract_schedule() -> pd.DataFrame | None:
+def extract_schedule(fname: str = "samples/schedule.pb") -> pd.DataFrame | None:
     return ...
+
+def extract_updates(fname: str = "samples/schedule.pb") -> pd.DataFrame | None:
+    return ...
+
+def extract_alerts(fname: str = "samples/alerts.pb") -> pd.DataFrame | None:
+    feed = gtfs.FeedMessage()
+
+    try:
+        with open(fname, mode="rb") as r:
+            feed.ParseFromString(r.read())
+    except:
+        return
+
+    for alert in feed.entity:
+        print(alert.alert)
+        print(alert.alert.informed_entity)
+
+
+    return
+
+def extract_detours(fname: str = "samples/bus-detours.pb") -> pd.DataFrame | None:
+    feed = gtfs.FeedMessage()
+
+    try:
+        with open(fname, mode="rb") as r:
+            feed.ParseFromString(r.read())
+    except:
+        return
+
+    for detour in feed.entity:
+        print(detour.trip_modifications)
+
+
+
+    return
 
 
 if __name__ == "__main__":
 
 
-    print(extract_positions())
+    # print(extract_positions())
+
+    # print(extract_alerts())
+    print(extract_detours())
+
