@@ -5,7 +5,7 @@ import process
 from process import extract_positions
 import pandas as pd
 
-DATA_DIR = os.getenv("DATA_DIR", ".")
+DATA_DIR = os.getenv("DATA_DIR", "..")
 
 pd.set_option('display.max_columns', None)
 TORONTO_TZ = ZoneInfo("America/Toronto")
@@ -121,8 +121,6 @@ def flush_detours(bus_detour_name: str, streetcar_detour_name : str):
     shapes.to_parquet(f"{DATA_DIR}/silver/shapes/{DATE_OF_START}/shapes-{int(START_DATETIME.timestamp())}.parquet.sz", compression="snappy")
 
 if __name__ == "__main__":
-    DATA_DIR = "test_dir"
-
     bus_detour_fname, tor_bus = retrieve_protobuf(ITEMS["BUS_DETOURS"])
     streetcar_detour_fname, tor_scar =retrieve_protobuf(ITEMS["STREETCAR_DETOURS"])
     retrieve_protobuf(ITEMS["TRIP_UPDATES"])
