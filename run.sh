@@ -1,4 +1,5 @@
-source "$HOME/ttc-poller/venv/bin/activate"
+cd "$HOME/ttc-poller" || exit 1
 
-python3 "$HOME/ttc-poller/scripts/main.py"
+source "venv/bin/activate"
+python3 "main.py"
 

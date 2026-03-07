@@ -5,3 +5,5 @@
 /silver/
 *.sqlite
 *.db
+/data_test/
+/test_dir/
