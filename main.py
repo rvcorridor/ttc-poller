@@ -1,39 +1,63 @@
-import datetime
-
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import requests, time, os
+import process
 from process import extract_positions
 import pandas as pd
 
 pd.set_option('display.max_columns', None)
+TORONTO_TZ = ZoneInfo("America/Toronto")
 
 position_buffer: None | pd.DataFrame = None
-now = time.time()
-date_of_start = datetime.datetime.fromtimestamp(now).date()
 
-base_url = "https://gtfsrt.ttc.ca/"
-vehicle_ext = "vehicles/position"
-headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+START_DATETIME = datetime.now(TORONTO_TZ)
+DATE_OF_START = START_DATETIME.strftime("%Y%m%d")
+
+HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
                          'Chrome/91.0.4472.124 Safari/537.36'}
 
+ITEMS = {
+    "POSITIONS": {
+        "name" : "positions",
+        "URL" : "https://gtfsrt.ttc.ca/vehicles/position?format=binary"
+    },
+    "BUS_DETOURS": {
+        "name" : "bus-detours",
+        "URL" : "https://gtfsrt.ttc.ca/trips/detour?type=bus&format=binary"
+    },
+    "STREETCAR_DETOURS": {
+        "name": "streetcar-detours",
+        "URL" : "https://gtfsrt.ttc.ca/trips/detour?type=streetcar&format=binary"
+    },
+    "TRIP_UPDATES": {
+        "name" : "updates",
+        "URL" : "https://gtfsrt.ttc.ca/trips/update?format=binary"
+    },
+    "SERVICE_ALERTS": {
+        "name" : "alerts",
+        "URL" : "https://gtfsrt.ttc.ca/alerts/all?format=binary"
+    }
+}
 
-def retrieve_positions() -> (str | None, int):
+def retrieve_protobuf(info: dict) -> (str | None, int):
     """
     Gets TTC vehicle positions as a protocol buffer, unprocessed from the API.
 
     :return: (filename of the protocol buffer, None if unsuccessful else unix timestamp)
     """
 
-    req = requests.get("https://gtfsrt.ttc.ca/vehicles/position?format=binary", headers=headers)
+    req = requests.get(info["URL"], headers=HEADERS)
 
     print(f"{int(time.time())} : Request returned code {req.status_code}: {req.reason}")
 
     if req.ok:
-        tor = int(time.time())
-        date_of_now = datetime.datetime.fromtimestamp(tor).date()
+        now_datetime = datetime.now(TORONTO_TZ)
+        tor = int(now_datetime.timestamp())
+        date_of_now = now_datetime.strftime("%Y%m%d")
 
-        os.makedirs(f"bronze/{date_of_now}", exist_ok=True)
+        os.makedirs(f"bronze/{info['name']}/{date_of_now}", exist_ok=True)
 
-        fname = f"bronze/{date_of_now}/positions-{tor}.pb"
+        fname = f"bronze/{info['name']}/{date_of_now}/{info['name']}-{tor}.pb"
 
         with open(fname, "wb") as out:
             out.write(req.content)
@@ -42,14 +66,13 @@ def retrieve_positions() -> (str | None, int):
 
     return None, 0
 
-
 def poll_positions():
     """
     Appends the processed contents of the API request to the current buffer.
     """
     global position_buffer
 
-    fname, retrieval = retrieve_positions()
+    fname, retrieval = retrieve_protobuf(ITEMS["POSITIONS"])
 
     buf = extract_positions(fname=fname)
 
@@ -80,115 +103,40 @@ def flush_positions():
 
     position_buffer = position_buffer.sort_values(by=['Timestamp', 'TripID'])
 
-    os.makedirs(f"silver/{date_of_start}", exist_ok=True)
+    os.makedirs(f"silver/positions/{DATE_OF_START}", exist_ok=True)
 
-    position_buffer.to_parquet(path=f"silver/{date_of_start}/positions-{int(now)}.parquet.sz", compression="snappy")
+    position_buffer.to_parquet(path=f"silver/positions/{DATE_OF_START}/positions-{int(START_DATETIME.timestamp())}.parquet.sz", compression="snappy")
 
     position_buffer = None
 
-def retrieve_bus_trip_detours() -> (str | None, int): # This does it all basically
-    req = requests.get("https://gtfsrt.ttc.ca/trips/detour?type=bus&format=binary", headers=headers)
+def flush_detours(bus_detour_name: str, streetcar_detour_name : str):
+    detours, shapes = process.extract_combined_detours(bus_detour_name, streetcar_detour_name)
 
-    print(f"{int(time.time())} : Bus trip detours returned code {req.status_code}")
+    os.makedirs(f"silver/detours/{DATE_OF_START}", exist_ok=True)
+    os.makedirs(f"silver/shapes/{DATE_OF_START}", exist_ok=True)
 
-    if req.ok:
-
-        tor = int(time.time())
-        date_of_now = datetime.datetime.fromtimestamp(tor).date()
-
-        os.makedirs(f"bronze/{date_of_now}", exist_ok=True)
-
-        fname = f"bronze/{date_of_now}/bus-trip-detours-{tor}.pb"
-
-        with open(fname, "wb") as out:
-            out.write(req.content)
-
-        return fname, tor
-
-    return None, 0
-
-def retrieve_streetcar_trip_detours() -> (str | None, int): # This does it all basically
-    req = requests.get("https://gtfsrt.ttc.ca/trips/detour?type=streetcar&format=binary", headers=headers)
-
-    print(f"{int(time.time())} : Streetcar trip detours returned code {req.status_code}")
-
-    if req.ok:
-
-        tor = int(time.time())
-        date_of_now = datetime.datetime.fromtimestamp(tor).date()
-
-        os.makedirs(f"bronze/{date_of_now}", exist_ok=True)
-
-        fname = f"bronze/{date_of_now}/streetcar-trip-detours-{tor}.pb"
-
-        with open(fname, "wb") as out:
-            out.write(req.content)
-
-        return fname, tor
-
-    return None, 0
-
-def retrieve_trip_updates() -> (str | None, int):
-    req = requests.get("https://gtfsrt.ttc.ca/trips/update?format=binary", headers=headers)
-
-    print(f"{int(time.time())} : Trip updates returned code {req.status_code}")
-
-    if req.ok:
-        tor = int(time.time())
-        date_of_now = datetime.datetime.fromtimestamp(tor).date()
-
-        os.makedirs(f"bronze/{date_of_now}", exist_ok=True)
-
-        fname = f"bronze/{date_of_now}/updates-{tor}.pb"
-
-        with open(fname, "wb") as out:
-            out.write(req.content)
-
-        return fname, tor
-
-    return None, 0
-
-def retrieve_service_alerts() -> (str | None, int):
-    req = requests.get("https://gtfsrt.ttc.ca/alerts/all?format=binary", headers=headers)
-
-    print(f"{int(time.time())} : Service alerts returned code {req.status_code}")
-
-    if req.ok:
-        tor = int(time.time())
-        date_of_now = datetime.datetime.fromtimestamp(tor).date()
-
-        os.makedirs(f"bronze/{date_of_now}", exist_ok=True)
-
-        fname = f"bronze/{date_of_now}/alerts-{tor}.pb"
-
-        with open(fname, "wb") as out:
-            out.write(req.content)
-
-        return fname, tor
-
-    return None, 0
-
-
-
+    detours.to_parquet(f"silver/detours/{DATE_OF_START}/detours-{int(START_DATETIME.timestamp())}.parquet.sz", compression="snappy")
+    shapes.to_parquet(f"silver/shapes/{DATE_OF_START}/shapes-{int(START_DATETIME.timestamp())}.parquet.sz", compression="snappy")
 
 if __name__ == "__main__":
 
-    retrieve_bus_trip_detours()
-    retrieve_streetcar_trip_detours()
-    retrieve_service_alerts()
-    retrieve_trip_updates()
+    bus_detour_fname, tor_bus = retrieve_protobuf(ITEMS["BUS_DETOURS"])
+    streetcar_detour_fname, tor_scar =retrieve_protobuf(ITEMS["STREETCAR_DETOURS"])
+    retrieve_protobuf(ITEMS["TRIP_UPDATES"])
+    retrieve_protobuf(ITEMS["SERVICE_ALERTS"])
 
-    os.makedirs(f"silver/{date_of_start}", exist_ok=True)
+    os.makedirs(f"silver/positions/{DATE_OF_START}", exist_ok=True)
 
     # Extract 20 times, spaced by 15 seconds = 5 min * 4 times / min
 
     poll_positions()
 
-    for _ in range(19):
-        time.sleep(15)
+    for _ in range(9):
+        time.sleep(30)
         poll_positions()
 
     flush_positions()  # finished querying everything needed!
+    flush_detours(bus_detour_fname, streetcar_detour_fname)  # Here so it doesn't waste time and mess up the cycle
 
 
 

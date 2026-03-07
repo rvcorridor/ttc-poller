@@ -3,3 +3,5 @@
 /raw/
 /bronze/
 /silver/
+*.sqlite
+*.db

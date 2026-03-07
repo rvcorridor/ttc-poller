@@ -1,8 +1,17 @@
+from pandas import DataFrame
+
 import gtfs.gtfs_realtime_pb2 as gtfs
 import pandas as pd
+import numpy as np
+import state
 
 POSITION_COLUMNS = ["HeaderTime", "Timestamp", "TripID", "RouteID", "Latitude", "Longitude", "Bearing", "Speed", "TargetStop",
                 "Occupancy"]
+
+DETOUR_COLUMNS = ["DetourID", "ShapeID", "StartStop", "EndStop", ]
+TRIP_DETOUR_COLUMNS = ["TripID", "DetourID"]
+DETOUR_DATE_COLUMNS = ["AffectedDate", "DetourID"]
+DETOUR_SHAPE_COLUMNS = ["ShapeID", "EncodedPolyline"]
 
 # print(gtfs.FeedMessage().ParseFromString());
 
@@ -55,34 +64,119 @@ def extract_alerts(fname: str = "samples/alerts.pb") -> pd.DataFrame | None:
         return
 
     for alert in feed.entity:
-        print(alert.alert)
-        print(alert.alert.informed_entity)
-
+        print(alert)
 
     return
 
-def extract_detours(fname: str = "samples/bus-detours.pb") -> pd.DataFrame | None:
+def extract_detours(fname: str = "samples/bus-detours.pb") \
+        -> tuple[DataFrame|None, DataFrame|None, DataFrame|None, DataFrame|None]:
     feed = gtfs.FeedMessage()
+    detours = pd.DataFrame(columns=DETOUR_COLUMNS)
+    detour_shapes = pd.DataFrame(columns=DETOUR_SHAPE_COLUMNS)
+    affected_trips = None
+    affected_dates = None
 
     try:
         with open(fname, mode="rb") as r:
             feed.ParseFromString(r.read())
     except:
-        return
+        return None,None,None,None
 
     for detour in feed.entity:
-        print(detour.trip_modifications)
+        if detour.HasField("trip_modifications"): # Log to trip_modifications
+            # print("trip_modifications")
+            shape, start, end = None, None, None
+            # print(detour.id)
+            # print(detour.trip_modifications)
+            # modifications
 
+            for selected in detour.trip_modifications.selected_trips:
+                shape = selected.shape_id
+                # print(selected.trip_ids)
 
+                temp = pd.DataFrame()
+                temp["TripID"] = np.asarray(selected.trip_ids)
+                temp["DetourID"] = np.full(len(temp), detour.id);
+                # print(temp.head())
+                if affected_trips is None:
+                    affected_trips = temp
+                else:
+                    affected_trips = pd.concat([affected_trips, temp], ignore_index=True)
 
-    return
+            for modifications in detour.trip_modifications.modifications:
+                start = modifications.start_stop_selector.stop_sequence
+                end = modifications.end_stop_selector.stop_sequence
+
+            # Extract detour dates
+            temp = pd.DataFrame()
+            temp["AffectedDate"] = np.asarray(detour.trip_modifications.service_dates)
+            temp["DetourID"] = np.full(len(temp), detour.id);
+            if affected_dates is None:
+                affected_dates = temp
+            else:
+                affected_dates = pd.concat([affected_dates, temp], ignore_index=True)
+
+            row = [detour.id, shape, start, end]
+            detours.loc[len(detours)] = row
+
+        elif detour.HasField("shape"): # Log to detour_shapes
+            # print("shape")
+            # print(detour.id)
+            # print(detour.shape.shape_id)
+            # print(detour.shape)
+
+            row = [detour.shape.shape_id, detour.shape.encoded_polyline]
+            detour_shapes.loc[len(detour_shapes)] = row
+
+    return detours, affected_dates, affected_trips, detour_shapes
+
+def combine_bus_and_streetcar_data(bus_fname: str="samples/bus-detours.pb", streetcar_fname: str="samples/streetcar-detours.pb") \
+        -> tuple[DataFrame, DataFrame, DataFrame, DataFrame]:
+    bus_buff = extract_detours(bus_fname)
+    streetcar_buff = extract_detours(streetcar_fname)
+
+    tup = []
+
+    for a, b in zip(bus_buff, streetcar_buff):
+        if a is None:
+            tup.append(b)
+        elif b is None:
+            tup.append(a)
+        else:
+            tup.append(pd.concat([a,b], ignore_index=True))
+
+    return tuple(tup)
+
+def process_detours(detours, affected_dates, affected_trips) -> pd.DataFrame:
+    ab = pd.merge(detours, affected_dates, on="DetourID")
+    abc = pd.merge(ab, affected_trips, on="DetourID")
+    # print(abc)
+
+    return abc
+
+def extract_combined_detours(bus_fname: str="samples/bus-detours.pb", streetcar_fname: str="samples/streetcar-detours.pb"):
+    a, b, c, d = combine_bus_and_streetcar_data(bus_fname, streetcar_fname)
+
+    abc = process_detours(a, b, c)
+
+    return abc, d
+
 
 
 if __name__ == "__main__":
+    pd.set_option('display.max_columns', None)
+    """
+
+    print()
+    a, b, c, d = extract_detours()
+    print(a)
+    print(b)
+    print(c)
+    print(d)
+
+    processDetours(a, b, c, d)"""
+
+    print(combine_bus_and_streetcar_data())
 
 
-    # print(extract_positions())
-
-    # print(extract_alerts())
-    print(extract_detours())
 
