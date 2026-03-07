@@ -5,6 +5,8 @@ import process
 from process import extract_positions
 import pandas as pd
 
+DATA_DIR = os.getenv("DATA_DIR", ".")
+
 pd.set_option('display.max_columns', None)
 TORONTO_TZ = ZoneInfo("America/Toronto")
 
@@ -55,9 +57,9 @@ def retrieve_protobuf(info: dict) -> (str | None, int):
         tor = int(now_datetime.timestamp())
         date_of_now = now_datetime.strftime("%Y%m%d")
 
-        os.makedirs(f"bronze/{info['name']}/{date_of_now}", exist_ok=True)
+        os.makedirs(f"{DATA_DIR}/bronze/{info['name']}/{date_of_now}", exist_ok=True)
 
-        fname = f"bronze/{info['name']}/{date_of_now}/{info['name']}-{tor}.pb"
+        fname = f"{DATA_DIR}/bronze/{info['name']}/{date_of_now}/{info['name']}-{tor}.pb"
 
         with open(fname, "wb") as out:
             out.write(req.content)
@@ -103,29 +105,30 @@ def flush_positions():
 
     position_buffer = position_buffer.sort_values(by=['Timestamp', 'TripID'])
 
-    os.makedirs(f"silver/positions/{DATE_OF_START}", exist_ok=True)
+    os.makedirs(f"{DATA_DIR}/silver/positions/{DATE_OF_START}", exist_ok=True)
 
-    position_buffer.to_parquet(path=f"silver/positions/{DATE_OF_START}/positions-{int(START_DATETIME.timestamp())}.parquet.sz", compression="snappy")
+    position_buffer.to_parquet(path=f"{DATA_DIR}/silver/positions/{DATE_OF_START}/positions-{int(START_DATETIME.timestamp())}.parquet.sz", compression="snappy")
 
     position_buffer = None
 
 def flush_detours(bus_detour_name: str, streetcar_detour_name : str):
     detours, shapes = process.extract_combined_detours(bus_detour_name, streetcar_detour_name)
 
-    os.makedirs(f"silver/detours/{DATE_OF_START}", exist_ok=True)
-    os.makedirs(f"silver/shapes/{DATE_OF_START}", exist_ok=True)
+    os.makedirs(f"{DATA_DIR}/silver/detours/{DATE_OF_START}", exist_ok=True)
+    os.makedirs(f"{DATA_DIR}/silver/shapes/{DATE_OF_START}", exist_ok=True)
 
-    detours.to_parquet(f"silver/detours/{DATE_OF_START}/detours-{int(START_DATETIME.timestamp())}.parquet.sz", compression="snappy")
-    shapes.to_parquet(f"silver/shapes/{DATE_OF_START}/shapes-{int(START_DATETIME.timestamp())}.parquet.sz", compression="snappy")
+    detours.to_parquet(f"{DATA_DIR}/silver/detours/{DATE_OF_START}/detours-{int(START_DATETIME.timestamp())}.parquet.sz", compression="snappy")
+    shapes.to_parquet(f"{DATA_DIR}/silver/shapes/{DATE_OF_START}/shapes-{int(START_DATETIME.timestamp())}.parquet.sz", compression="snappy")
 
 if __name__ == "__main__":
+    DATA_DIR = "test_dir"
 
     bus_detour_fname, tor_bus = retrieve_protobuf(ITEMS["BUS_DETOURS"])
     streetcar_detour_fname, tor_scar =retrieve_protobuf(ITEMS["STREETCAR_DETOURS"])
     retrieve_protobuf(ITEMS["TRIP_UPDATES"])
     retrieve_protobuf(ITEMS["SERVICE_ALERTS"])
 
-    os.makedirs(f"silver/positions/{DATE_OF_START}", exist_ok=True)
+    os.makedirs(f"{DATA_DIR}/silver/positions/{DATE_OF_START}", exist_ok=True)
 
     # Extract 20 times, spaced by 15 seconds = 5 min * 4 times / min
 
