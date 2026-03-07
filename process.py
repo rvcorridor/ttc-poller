@@ -1,17 +1,18 @@
 import gtfs.gtfs_realtime_pb2 as gtfs
 import pandas as pd
 
+DATA_COLUMNS = ["HeaderTime", "Timestamp", "TripID", "RouteID", "Latitude", "Longitude", "Bearing", "Speed", "TargetStop",
+                "Occupancy"]
 
 # print(gtfs.FeedMessage().ParseFromString());
 
-def extract_info(fname: str = "vehicle-positions.pb") -> str | None:
+
+def extract_positions(fname: str = "vehicle-positions.pb") -> pd.DataFrame | None:
+    # I don't want to see the gtfs stuff in main.py
+
     feed = gtfs.FeedMessage()
-    columns = ["Timestamp", "TripID", "RouteID", "Latitude", "Longitude", "Bearing", "Speed", "TargetStop",
-               "Occupancy"]
 
-    df = pd.DataFrame(columns=columns)
-
-    pd.set_option('display.max_columns', None)
+    buf = pd.DataFrame(columns=DATA_COLUMNS)
 
     try:
         with open(fname, mode="rb") as r:
@@ -28,19 +29,21 @@ def extract_info(fname: str = "vehicle-positions.pb") -> str | None:
         # print(vehicle)
 
         if vehicle.HasField("trip"):  # TTC gives position of vehicles still in the garage lol
-            lst = [vehicle.timestamp, vehicle.trip.trip_id, vehicle.trip.route_id, vehicle.position.latitude,
+            lst = [feed.header.timestamp, vehicle.timestamp, vehicle.trip.trip_id, vehicle.trip.route_id, vehicle.position.latitude,
                    vehicle.position.longitude, vehicle.position.bearing, vehicle.position.speed,
                    vehicle.stop_id, vehicle.occupancy_status]
-            df.loc[len(df)] = lst
+            buf.loc[len(buf)] = lst
 
-    print(df)
+    # print(df)
 
-    out = f'raw/positions-{feed.header.timestamp}.gzip'
+    return buf
 
-    df.to_parquet(out, compression="gzip")
 
-    return out
+def extract_schedule() -> pd.DataFrame | None:
+    return ...
 
 
 if __name__ == "__main__":
-    extract_info()
+
+
+    print(extract_positions())
